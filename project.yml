@@ -22,19 +22,20 @@ targets:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: DiggerMap
-        CFBundleShortVersionString: "1.2"
-        CFBundleVersion: "3"
+        CFBundleShortVersionString: "1.3"
+        CFBundleVersion: "4"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSMicrophoneUsageDescription: "Микрофон нужен для голосовых команд."
+        NSCameraUsageDescription: "Камера нужна для фотографий, прикреплённых к меткам маршрута."
         NSMotionUsageDescription: "Барометр используется для оценки изменения высоты."
         UIBackgroundModes: [audio]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.diggermap.route
         SWIFT_VERSION: "5.0"
-        MARKETING_VERSION: "1.2"
-        CURRENT_PROJECT_VERSION: "3"
+        MARKETING_VERSION: "1.3"
+        CURRENT_PROJECT_VERSION: "4"
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGNING_ALLOWED: NO

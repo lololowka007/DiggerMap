@@ -16,9 +16,10 @@ struct RouteState: Codable {
     var corridorWidth: Double = 2
     var stepLength: Double = 0.75
     var lastCommand: String = ""
+    var markers = [RouteMarker(x: 0, y: 0, level: 0, heading: 0, kind: .entrance, title: "Вход", detail: "Уровень отсчёта")]
 
     private enum CodingKeys: String, CodingKey {
-        case points, heading, level, totalMeters, corridorWidth, stepLength, lastCommand
+        case points, heading, level, totalMeters, corridorWidth, stepLength, lastCommand, markers
     }
 
     init() {}
@@ -32,6 +33,15 @@ struct RouteState: Codable {
         corridorWidth = try values.decodeIfPresent(Double.self, forKey: .corridorWidth) ?? 2
         stepLength = try values.decodeIfPresent(Double.self, forKey: .stepLength) ?? 0.75
         lastCommand = try values.decodeIfPresent(String.self, forKey: .lastCommand) ?? ""
+        if let saved = try values.decodeIfPresent([RouteMarker].self, forKey: .markers) { markers = saved }
+        else {
+            markers = points.compactMap { point in
+                guard let label = point.label else { return nil }
+                return RouteMarker(x: point.x, y: point.y, level: point.level, heading: 0,
+                                   kind: label == "Вход" || label == "Старт" ? .entrance : .note,
+                                   title: label, detail: "Метка из предыдущей версии")
+            }
+        }
     }
 
     mutating func apply(_ commands: [RouteCommand], source: String) -> Bool {
@@ -42,6 +52,16 @@ struct RouteState: Codable {
             switch command {
             case .walking:
                 continue
+            case .backtrack(let meters):
+                guard meters > 0 && meters <= 500 else { continue }
+                let radians = heading * .pi / 180
+                points.append(RoutePoint(x: last.x - sin(radians) * meters,
+                                         y: last.y - cos(radians) * meters, level: level))
+                totalMeters += meters
+                addAnnotation(MarkerDraft(kind: .arrow, title: String(format: "Назад %.1f м", meters),
+                                          detail: source, passages: [Passage(angle: 180, label: "Назад")]))
+            case .marker(let draft):
+                addAnnotation(draft)
             case .move(let meters):
                 guard meters > 0 && meters <= 500 else { continue }
                 let radians = heading * .pi / 180
@@ -53,12 +73,16 @@ struct RouteState: Codable {
                 totalMeters += meters
             case .turn(let degrees):
                 heading = (heading + degrees + 360).truncatingRemainder(dividingBy: 360)
+                if abs(degrees) >= 179 {
+                    addAnnotation(MarkerDraft(kind: .uTurn, title: "Разворот 180°", detail: source))
+                }
             case .level(let delta):
                 level += delta
                 points.append(RoutePoint(x: last.x, y: last.y, level: level,
                                          label: delta > 0 ? "Подъём" : "Спуск"))
+                addAnnotation(MarkerDraft(kind: .stairs, title: delta > 0 ? "Подъём" : "Спуск", detail: source))
             case .note(let note):
-                points.append(RoutePoint(x: last.x, y: last.y, level: level, label: note))
+                addAnnotation(MarkerDraft(kind: .note, title: note, detail: source))
             case .width(let meters):
                 guard meters >= 0.5 && meters <= 20 else { continue }
                 corridorWidth = meters
@@ -70,14 +94,22 @@ struct RouteState: Codable {
     }
 
     mutating func addMarker(_ label: String) {
-        guard let last = points.last else { return }
-        points.append(RoutePoint(x: last.x, y: last.y, level: level, label: label))
+        addAnnotation(MarkerDraft(kind: .note, title: label))
         lastCommand = "Метка: \(label)"
+    }
+
+    mutating func addAnnotation(_ draft: MarkerDraft) {
+        guard let last = points.last else { return }
+        markers.append(RouteMarker(x: last.x, y: last.y, level: level, heading: heading,
+                                   kind: draft.kind, title: draft.title, detail: draft.detail,
+                                   passages: draft.passages))
     }
 }
 
 enum RouteCommand {
     case walking(Bool)
+    case backtrack(Double)
+    case marker(MarkerDraft)
     case move(Double)
     case turn(Double)
     case level(Int)

@@ -17,7 +17,7 @@ jobs:
       - name: Check spoken route commands
         run: |
           mkdir -p build
-          swiftc Sources/RouteModel.swift Sources/CommandParser.swift Sources/UtteranceSegmenter.swift Tests/main.swift -o build/parser-check
+          swiftc Sources/RouteAnnotations.swift Sources/RouteModel.swift Sources/CommandParser.swift Sources/CorridorGeometry.swift Sources/UtteranceSegmenter.swift Tests/main.swift -o build/parser-check
           ./build/parser-check
       - name: Check real local Russian transcription
         run: |
@@ -52,7 +52,12 @@ jobs:
           SIMCTL_CHILD_DIGGERMAP_DEMO=1 xcrun simctl launch "$DEVICE" app.diggermap.route
           sleep 4
           xcrun simctl io "$DEVICE" screenshot build/iPhone16ProMax.png
+          for MODE in editor settings marker; do
+            SIMCTL_CHILD_DIGGERMAP_DEMO=1 SIMCTL_CHILD_DIGGERMAP_PREVIEW="$MODE" xcrun simctl launch --terminate-running-process "$DEVICE" app.diggermap.route
+            sleep 3
+            xcrun simctl io "$DEVICE" screenshot "build/iPhone16ProMax-$MODE.png"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: iPhone16ProMax-preview
-          path: build/iPhone16ProMax.png
+          path: build/iPhone16ProMax*.png
