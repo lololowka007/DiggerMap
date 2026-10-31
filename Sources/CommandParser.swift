@@ -18,6 +18,9 @@ enum CommandParser {
 
     static func parse(_ raw: String, stepLength: Double = 0.75) -> [RouteCommand] {
         let text = raw.lowercased().replacingOccurrences(of: "ё", with: "е")
+            .replacingOccurrences(of: "на лево", with: "налево")
+            .replacingOccurrences(of: "на право", with: "направо")
+            .replacingOccurrences(of: "°", with: " градусов ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return [] }
         if text == "стоп" || text.contains("остановил") || text.contains("остановился") || text.contains("не иду") {
@@ -63,7 +66,9 @@ enum CommandParser {
 
     private static func number(before unit: String, in text: String) -> Double? {
         let words = text.split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "," && $0 != "." }).map(String.init)
-        guard let unitIndex = words.firstIndex(where: { $0.hasPrefix(unit) }), unitIndex > 0 else { return nil }
+        guard let unitIndex = words.firstIndex(where: {
+            $0.hasPrefix(unit) || (unit == "метр" && ["м", "м."].contains($0))
+        }), unitIndex > 0 else { return nil }
         let window = words[max(0, unitIndex - 3)..<unitIndex]
         if let numeric = window.reversed().compactMap({ Double($0.replacingOccurrences(of: ",", with: ".")) }).first {
             return numeric

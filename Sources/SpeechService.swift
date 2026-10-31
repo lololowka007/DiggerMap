@@ -18,6 +18,7 @@ final class SpeechService: ObservableObject {
     private var pending: [[Float]] = []
     private var decodeGeneration = 0
     private var captureGeneration = 0
+    private var audioFrames = 0
     private var observers: [NSObjectProtocol] = []
 
     init() {
@@ -77,9 +78,14 @@ final class SpeechService: ObservableObject {
                 inputName = session.currentRoute.inputs.first?.portName ?? "Микрофон iPhone"
                 let audio = VoiceCapture()
                 captureGeneration += 1
+                audioFrames = 0
                 let captureID = captureGeneration
                 audio.onLevel = { [weak self] value in
-                    Task { @MainActor in self?.level = value }
+                    Task { @MainActor in
+                        guard let self, captureID == self.captureGeneration else { return }
+                        self.audioFrames += 1
+                        self.level = value
+                    }
                 }
                 audio.onPhrase = { [weak self] samples in
                     Task { @MainActor in
@@ -103,6 +109,14 @@ final class SpeechService: ObservableObject {
                 isListening = true
                 status = "Слушаю · говори и делай паузу после команды"
                 onEvent?("Запись включена: \(inputName)")
+                Task {
+                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                    if captureID == self.captureGeneration, self.isListening, self.audioFrames == 0 {
+                        self.stop(discardPending: true)
+                        self.status = "Из микрофона не поступает звук. Переподключи гарнитуру и повтори."
+                        self.onEvent?(self.status)
+                    }
+                }
             } catch {
                 status = error.localizedDescription
                 onEvent?("Ошибка: \(status)")
