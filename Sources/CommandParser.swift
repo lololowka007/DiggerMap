@@ -1,32 +1,67 @@
 import Foundation
 
 enum CommandParser {
-    private static let numbers: [String: Int] = [
-        "один": 1, "два": 2, "три": 3, "четыре": 4, "пять": 5,
-        "шесть": 6, "семь": 7, "восемь": 8, "девять": 9, "десять": 10,
-        "одиннадцать": 11, "двенадцать": 12, "пятнадцать": 15,
-        "двадцать": 20, "тридцать": 30, "сорок": 40, "сорок пять": 45,
-        "пятьдесят": 50, "сто": 100
+    private static let units: [String: Double] = [
+        "ноль": 0, "один": 1, "одна": 1, "одно": 1, "два": 2, "две": 2,
+        "три": 3, "четыре": 4, "пять": 5, "шесть": 6, "семь": 7,
+        "восемь": 8, "девять": 9, "десять": 10, "одиннадцать": 11,
+        "двенадцать": 12, "тринадцать": 13, "четырнадцать": 14,
+        "пятнадцать": 15, "шестнадцать": 16, "семнадцать": 17,
+        "восемнадцать": 18, "девятнадцать": 19,
+        "двадцать": 20, "тридцать": 30, "сорок": 40, "пятьдесят": 50,
+        "шестьдесят": 60, "семьдесят": 70, "восемьдесят": 80,
+        "девяносто": 90, "сто": 100
     ]
 
-    static func parse(_ raw: String) -> RouteCommand {
-        let text = raw.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return .unknown }
-        if text.hasPrefix("точка") || text.hasPrefix("метка") || text.hasPrefix("заметка") {
-            let value = text.replacingOccurrences(of: "^(точка|метка|заметка)\\s*:?[\\s]*", with: "", options: .regularExpression)
-            return .note(value.isEmpty ? "Точка" : value)
+    static func parse(_ raw: String, stepLength: Double = 0.75) -> [RouteCommand] {
+        let text = raw.lowercased().replacingOccurrences(of: "ё", with: "е")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return [] }
+        if let marker = text.range(of: "^(точка|метка|заметка)\\s*:?[\\s]*", options: .regularExpression) {
+            let label = String(text[marker.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            return [.note(label.isEmpty ? "Точка" : label.capitalized)]
         }
-        if text.contains("вверх") || text.contains("подъём") || text.contains("подъем") { return .level(1) }
-        if text.contains("вниз") || text.contains("спуск") { return .level(-1) }
-        if text.contains("налево") || text.contains("влево") { return .turn(text.contains("45") || text.contains("сорок пять") ? -45 : -90) }
-        if text.contains("направо") || text.contains("вправо") { return .turn(text.contains("45") || text.contains("сорок пять") ? 45 : 90) }
-        if text.contains("шаг") || text.contains("прямо") {
-            if let match = text.range(of: "[0-9]+", options: .regularExpression),
-               let value = Int(text[match]) { return .move(value) }
-            for (word, value) in numbers.sorted(by: { $0.key.count > $1.key.count }) where text.contains(word) {
-                return .move(value)
+        if text.contains("развилка") { return [.note("Развилка")] }
+        if text.contains("дверь") { return [.note("Дверь")] }
+        if text.contains("выход") { return [.note("Выход")] }
+        if text.contains("лестница") { return [.note("Лестница")] }
+        if text.contains("ширин") || (text.contains("коридор") && text.contains("метр")) {
+            if let width = number(before: "метр", in: text) { return [.width(width)] }
+        }
+        if text.contains("подъем") || text.contains("вверх") || text.contains("этаж выше") { return [.level(1)] }
+        if text.contains("спуск") || text.contains("вниз") || text.contains("этаж ниже") { return [.level(-1)] }
+
+        var commands: [RouteCommand] = []
+        let left = text.contains("налево") || text.contains("влево") || text.contains("левее") || text.contains("в левую")
+        let right = text.contains("направо") || text.contains("вправо") || text.contains("правее") || text.contains("в правую")
+        if left != right {
+            let angle = number(before: "градус", in: text)
+                ?? (text.contains("чуть") || text.contains("слегка") ? 12 : 90)
+            if angle > 0 && angle <= 180 { commands.append(.turn(left ? -angle : angle)) }
+        }
+        if let meters = number(before: "метр", in: text) {
+            commands.append(.move(meters))
+        } else if let steps = number(before: "шаг", in: text) {
+            commands.append(.move(steps * stepLength))
+        }
+        return commands
+    }
+
+    private static func number(before unit: String, in text: String) -> Double? {
+        let words = text.split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "," && $0 != "." }).map(String.init)
+        guard let unitIndex = words.firstIndex(where: { $0.hasPrefix(unit) }), unitIndex > 0 else { return nil }
+        let window = words[max(0, unitIndex - 3)..<unitIndex]
+        if let numeric = window.reversed().compactMap({ Double($0.replacingOccurrences(of: ",", with: ".")) }).first {
+            return numeric
+        }
+        var sum = 0.0
+        var found = false
+        for word in window {
+            if let value = units[word] {
+                sum += value
+                found = true
             }
         }
-        return .unknown
+        return found ? sum : nil
     }
 }

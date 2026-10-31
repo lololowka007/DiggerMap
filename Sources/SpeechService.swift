@@ -5,15 +5,23 @@ import Speech
 final class SpeechService: ObservableObject {
     @Published var transcript = ""
     @Published var isListening = false
-    @Published var status = ""
+    @Published var status = "Нажми «Начать запись» перед маршрутом."
+    @Published var inputName = "Микрофон iPhone"
+
+    var onCommand: ((String) -> Void)?
 
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "ru-RU"))
     private let audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
+    private var commitWork: DispatchWorkItem?
+    private var rotationWork: DispatchWorkItem?
+    private var generation = 0
+    private var hasTap = false
+    private var wantsListening = false
 
     func toggle() {
-        if isListening { stop(); return }
+        if wantsListening { stop(); return }
         SFSpeechRecognizer.requestAuthorization { [weak self] authorization in
             guard authorization == .authorized else {
                 DispatchQueue.main.async { self?.status = "Разреши распознавание речи в настройках iPhone." }
@@ -33,48 +41,104 @@ final class SpeechService: ObservableObject {
 
     private func start() {
         guard let recognizer, recognizer.supportsOnDeviceRecognition else {
-            status = "Локальная русская модель речи недоступна. Введи команду текстом."
+            status = "Локальное распознавание русского недоступно на этом iPhone."
             return
         }
         guard recognizer.isAvailable else {
-            status = "Распознавание сейчас недоступно. Введи команду текстом."
+            status = "Распознавание речи сейчас недоступно."
             return
         }
+        wantsListening = true
+        startCapture()
+    }
+
+    private func startCapture() {
+        guard wantsListening, let recognizer else { return }
+        generation += 1
+        let currentGeneration = generation
+        transcript = ""
         do {
-            try AVAudioSession.sharedInstance().setCategory(.record, mode: .measurement)
-            try AVAudioSession.sharedInstance().setActive(true)
-            let request = SFSpeechAudioBufferRecognitionRequest()
-            request.requiresOnDeviceRecognition = true
-            request.shouldReportPartialResults = true
-            self.request = request
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetooth])
+            try session.setActive(true)
+            inputName = session.currentRoute.inputs.first?.portName ?? "Микрофон iPhone"
+            let newRequest = SFSpeechAudioBufferRecognitionRequest()
+            newRequest.requiresOnDeviceRecognition = true
+            newRequest.shouldReportPartialResults = true
+            request = newRequest
             let input = audioEngine.inputNode
             input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { buffer, _ in
-                request.append(buffer)
+                newRequest.append(buffer)
             }
+            hasTap = true
             audioEngine.prepare()
             try audioEngine.start()
             isListening = true
-            status = "Слушаю…"
-            task = recognizer.recognitionTask(with: request) { [weak self] result, error in
+            status = "Слушаю и добавляю команды автоматически"
+            task = recognizer.recognitionTask(with: newRequest) { [weak self] result, error in
                 DispatchQueue.main.async {
-                    if let result { self?.transcript = result.bestTranscription.formattedString }
-                    if let error { self?.status = "Речь: \(error.localizedDescription)"; self?.stop() }
+                    guard let self, self.wantsListening, self.generation == currentGeneration else { return }
+                    if let result {
+                        let phrase = result.bestTranscription.formattedString
+                        if phrase != self.transcript {
+                            self.transcript = phrase
+                            self.scheduleCommit()
+                        }
+                        if result.isFinal { self.commitAndRestart() }
+                    }
+                    if let error {
+                        self.status = "Распознавание остановилось: \(error.localizedDescription)"
+                        self.stopCapture()
+                        self.wantsListening = false
+                    }
                 }
             }
+            rotationWork?.cancel()
+            let rotation = DispatchWorkItem { [weak self] in self?.commitAndRestart() }
+            rotationWork = rotation
+            DispatchQueue.main.asyncAfter(deadline: .now() + 45, execute: rotation)
         } catch {
-            inputCleanup()
+            stopCapture()
+            wantsListening = false
             status = "Не удалось включить микрофон: \(error.localizedDescription)"
         }
     }
 
-    func stop() {
-        inputCleanup()
-        status = "Проверь текст и нажми «Добавить»."
+    private func scheduleCommit() {
+        commitWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.commitAndRestart() }
+        commitWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4, execute: work)
     }
 
-    private func inputCleanup() {
+    private func commitAndRestart() {
+        guard wantsListening else { return }
+        let phrase = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !phrase.isEmpty { onCommand?(phrase) }
+        stopCapture()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            guard self?.wantsListening == true else { return }
+            self?.startCapture()
+        }
+    }
+
+    func stop() {
+        wantsListening = false
+        stopCapture()
+        status = "Запись остановлена. Карта сохранена."
+    }
+
+    private func stopCapture() {
+        generation += 1
+        commitWork?.cancel()
+        rotationWork?.cancel()
+        commitWork = nil
+        rotationWork = nil
         if audioEngine.isRunning { audioEngine.stop() }
-        audioEngine.inputNode.removeTap(onBus: 0)
+        if hasTap {
+            audioEngine.inputNode.removeTap(onBus: 0)
+            hasTap = false
+        }
         request?.endAudio()
         task?.cancel()
         task = nil
