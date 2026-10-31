@@ -31,9 +31,8 @@ struct VoiceCheck {
         precondition(audio.count > 16000 && rms > 0.005, "Test fixture must contain audible speech")
         let results: [TranscriptionResult] = try await kit.transcribe(
             audioArray: audio,
-            decodeOptions: DecodingOptions(verbose: true, language: "ru", temperatureFallbackCount: 0,
-                sampleLength: 96, usePrefillCache: false, skipSpecialTokens: true, withoutTimestamps: true,
-                firstTokenLogProbThreshold: nil, noSpeechThreshold: nil))
+            decodeOptions: DecodingOptions(verbose: true, language: "ru", usePrefillCache: false,
+                firstTokenLogProbThreshold: nil))
         for result in results {
             print("DECODE: loops=\(result.timings.totalDecodingLoops), segments=\(result.segments.count), seconds=\(result.timings.inputAudioSeconds)")
         }
