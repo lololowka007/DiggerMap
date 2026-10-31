@@ -1,0 +1,30 @@
+name: Build unsigned IPA
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Archive iPhone app
+        run: |
+          xcodebuild archive -project DiggerMap.xcodeproj -scheme DiggerMap \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath build/DiggerMap.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+      - name: Package IPA for Sideloadly
+        run: |
+          mkdir -p build/Payload
+          cp -R build/DiggerMap.xcarchive/Products/Applications/DiggerMap.app build/Payload/
+          cd build
+          zip -qr DiggerMap-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DiggerMap-unsigned-ipa
+          path: build/DiggerMap-unsigned.ipa
