@@ -271,13 +271,13 @@ private struct MapPanel: View {
             let centerX = (minX + maxX) / 2
             let centerY = (minY + maxY) / 2
             let extent = max(max(maxX - minX, maxY - minY), 10) + route.corridorWidth * 2
-            let scale = min(geometry.size.width, geometry.size.height) * 0.76 / extent * zoom
+            let scale = min(geometry.size.width, geometry.size.height) * 0.76 / CGFloat(extent) * zoom
             let origin = CGPoint(x: geometry.size.width / 2 + pan.width,
                                  y: geometry.size.height / 2 + pan.height)
             Canvas { context, size in
                 func position(_ point: RoutePoint) -> CGPoint {
-                    CGPoint(x: origin.x + (point.x - centerX) * scale,
-                            y: origin.y - (point.y - centerY) * scale)
+                    CGPoint(x: origin.x + CGFloat(point.x - centerX) * scale,
+                            y: origin.y - CGFloat(point.y - centerY) * scale)
                 }
                 let gridSpacing = max(14, scale)
                 var grid = Path()
@@ -303,7 +303,7 @@ private struct MapPanel: View {
                     let dy = b.y - a.y
                     let length = hypot(dx, dy)
                     guard length > 0.1 else { continue }
-                    let offset = route.corridorWidth / 2 * scale
+                    let offset = CGFloat(route.corridorWidth / 2) * scale
                     let nx = -dy / length * offset
                     let ny = dx / length * offset
                     var fill = Path()
@@ -313,7 +313,7 @@ private struct MapPanel: View {
                     fill.addLine(to: CGPoint(x: a.x - nx, y: a.y - ny))
                     fill.closeSubpath()
                     context.fill(fill, with: .color(MapStyle.mint.opacity(0.10)))
-                    for side in [-1.0, 1.0] {
+                    for side: CGFloat in [-1, 1] {
                         var wall = Path()
                         wall.move(to: CGPoint(x: a.x + nx * side, y: a.y + ny * side))
                         wall.addLine(to: CGPoint(x: b.x + nx * side, y: b.y + ny * side))
@@ -370,8 +370,8 @@ private struct MapPanel: View {
                         .font(.caption2).foregroundStyle(MapStyle.muted)
                     if let cursor {
                         Text(String(format: "Курсор: %+.1f, %+.1f м",
-                                    centerX + (cursor.x - origin.x) / scale,
-                                    centerY - (cursor.y - origin.y) / scale))
+                                    centerX + Double((cursor.x - origin.x) / scale),
+                                    centerY - Double((cursor.y - origin.y) / scale)))
                             .font(.caption2.monospacedDigit()).foregroundStyle(.orange)
                     }
                 }

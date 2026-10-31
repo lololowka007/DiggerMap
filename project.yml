@@ -9,15 +9,20 @@ targets:
     platform: iOS
     sources:
       - path: Sources
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: DiggerMap
+        NSSpeechRecognitionUsageDescription: "Распознавание голосовых команд маршрута на устройстве."
+        NSMicrophoneUsageDescription: "Микрофон нужен для голосовых команд."
+        NSMotionUsageDescription: "Барометр используется для оценки изменения высоты."
+        UIBackgroundModes: [audio]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.diggermap.route
         SWIFT_VERSION: "5.0"
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: DiggerMap
-        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Распознавание голосовых команд маршрута на устройстве."
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Микрофон нужен для голосовых команд."
-        INFOPLIST_KEY_NSMotionUsageDescription: "Барометр используется для оценки изменения высоты."
-        INFOPLIST_KEY_UIBackgroundModes: "audio"
+        MARKETING_VERSION: "1.1"
+        CURRENT_PROJECT_VERSION: "2"
+        GENERATE_INFOPLIST_FILE: NO
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO
