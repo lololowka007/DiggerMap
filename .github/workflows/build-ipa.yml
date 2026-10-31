@@ -12,6 +12,11 @@ jobs:
         run: brew install xcodegen
       - name: Generate project
         run: xcodegen generate
+      - name: Check spoken route commands
+        run: |
+          mkdir -p build
+          swiftc Sources/RouteModel.swift Sources/CommandParser.swift Tests/main.swift -o build/parser-check
+          ./build/parser-check
       - name: Archive iPhone app
         run: |
           xcodebuild archive -project DiggerMap.xcodeproj -scheme DiggerMap \

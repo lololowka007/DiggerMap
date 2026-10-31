@@ -13,6 +13,8 @@ targets:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: DiggerMap
+        CFBundleShortVersionString: "1.1"
+        CFBundleVersion: "2"
         NSSpeechRecognitionUsageDescription: "Распознавание голосовых команд маршрута на устройстве."
         NSMicrophoneUsageDescription: "Микрофон нужен для голосовых команд."
         NSMotionUsageDescription: "Барометр используется для оценки изменения высоты."
