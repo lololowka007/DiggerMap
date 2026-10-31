@@ -40,6 +40,8 @@ struct RouteState: Codable {
         for command in commands {
             guard let last = points.last else { return false }
             switch command {
+            case .walking:
+                continue
             case .move(let meters):
                 guard meters > 0 && meters <= 500 else { continue }
                 let radians = heading * .pi / 180
@@ -72,6 +74,7 @@ struct RouteState: Codable {
 }
 
 enum RouteCommand {
+    case walking(Bool)
     case move(Double)
     case turn(Double)
     case level(Int)

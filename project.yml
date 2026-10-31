@@ -3,18 +3,29 @@ options:
   bundleIdPrefix: app.diggermap
   deploymentTarget:
     iOS: "17.0"
+packages:
+  WhisperKit:
+    url: https://github.com/argmaxinc/WhisperKit.git
+    exactVersion: "0.9.4"
 targets:
   DiggerMap:
     type: application
     platform: iOS
     sources:
       - path: Sources
+      - path: VoiceModels
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - package: WhisperKit
     info:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: DiggerMap
-        CFBundleShortVersionString: "1.1"
-        CFBundleVersion: "2"
+        CFBundleShortVersionString: "1.2"
+        CFBundleVersion: "3"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSSpeechRecognitionUsageDescription: "Распознавание голосовых команд маршрута на устройстве."
         NSMicrophoneUsageDescription: "Микрофон нужен для голосовых команд."
         NSMotionUsageDescription: "Барометр используется для оценки изменения высоты."
@@ -23,8 +34,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.diggermap.route
         SWIFT_VERSION: "5.0"
-        MARKETING_VERSION: "1.1"
-        CURRENT_PROJECT_VERSION: "2"
+        MARKETING_VERSION: "1.2"
+        CURRENT_PROJECT_VERSION: "3"
+        TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO

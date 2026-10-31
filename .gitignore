@@ -1,0 +1,5 @@
+build/
+VoiceModels/
+Sources/Info.plist
+*.xcodeproj/
+VoiceCheck/.build/

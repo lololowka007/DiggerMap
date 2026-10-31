@@ -20,6 +20,11 @@ enum CommandParser {
         let text = raw.lowercased().replacingOccurrences(of: "ё", with: "е")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return [] }
+        if text == "стоп" || text.contains("остановил") || text.contains("остановился") || text.contains("не иду") {
+            return [.walking(false)]
+        }
+        let parts = text.components(separatedBy: " потом ")
+        if parts.count > 1 { return parts.flatMap { parse($0, stepLength: stepLength) } }
         if let marker = text.range(of: "^(точка|метка|заметка)\\s*:?[\\s]*", options: .regularExpression) {
             let label = String(text[marker.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
             return [.note(label.isEmpty ? "Точка" : label.capitalized)]
@@ -46,6 +51,12 @@ enum CommandParser {
             commands.append(.move(meters))
         } else if let steps = number(before: "шаг", in: text) {
             commands.append(.move(steps * stepLength))
+        } else if text.contains("полметра") {
+            commands.append(.move(0.5))
+        } else if text.contains("иду") || text.contains("идем") || text.contains("двигаюсь") || text.contains("двигаемся") {
+            commands.append(.walking(true))
+        } else if text.contains("прямо") {
+            commands.append(.walking(true))
         }
         return commands
     }

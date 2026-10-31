@@ -1,151 +1,213 @@
 import AVFoundation
 import Combine
-import Speech
+import CoreML
+import WhisperKit
 
+@MainActor
 final class SpeechService: ObservableObject {
     @Published var transcript = ""
     @Published var isListening = false
-    @Published var status = "Нажми «Начать запись» перед маршрутом."
+    @Published var isStarting = false
+    @Published var isProcessing = false
+    @Published var status = "Готов к записи · распознавание на телефоне"
     @Published var inputName = "Микрофон iPhone"
-
+    @Published var level: Float = 0
     var onCommand: ((String) -> Void)?
+    var onEvent: ((String) -> Void)?
 
-    private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "ru-RU"))
-    private let audioEngine = AVAudioEngine()
-    private var request: SFSpeechAudioBufferRecognitionRequest?
-    private var task: SFSpeechRecognitionTask?
-    private var commitWork: DispatchWorkItem?
-    private var rotationWork: DispatchWorkItem?
-    private var generation = 0
-    private var hasTap = false
-    private var wantsListening = false
+    private var recognizer: WhisperKit?
+    private var capture: VoiceCapture?
+    private var pending: [[Float]] = []
+    private var decodeGeneration = 0
+    private var observers: [NSObjectProtocol] = []
+
+    init() {
+        observers.append(NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            let type = (notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt)
+            Task { @MainActor in
+                guard let self else { return }
+                if type == AVAudioSession.InterruptionType.began.rawValue, self.isListening {
+                    self.stop()
+                    self.status = "Запись прервана звонком или другим приложением. Нажми «Слушать»."
+                    self.onEvent?(self.status)
+                }
+            }
+        })
+        observers.append(NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.isListening else { return }
+                self.stop()
+                self.onEvent?("Аудиоустройство изменилось. Перезапускаю микрофон.")
+                self.toggle()
+            }
+        })
+    }
 
     func toggle() {
-        if wantsListening { stop(); return }
-        SFSpeechRecognizer.requestAuthorization { [weak self] authorization in
-            guard authorization == .authorized else {
-                DispatchQueue.main.async { self?.status = "Разреши распознавание речи в настройках iPhone." }
-                return
-            }
-            AVAudioSession.sharedInstance().requestRecordPermission { allowed in
-                DispatchQueue.main.async {
-                    guard allowed else {
-                        self?.status = "Разреши доступ к микрофону в настройках iPhone."
-                        return
+        if isStarting { return }
+        if isListening { stop(); return }
+        isStarting = true
+        Task {
+            do {
+                if recognizer == nil {
+                    status = "Загружаю встроенную русскую модель…"
+                    onEvent?(status)
+                    guard let root = Bundle.main.url(forResource: "VoiceModels", withExtension: nil) else {
+                        throw VoiceError.message("В IPA отсутствует папка голосовой модели.")
                     }
-                    self?.start()
+                    let tokens = root.appendingPathComponent("Tokenizers")
+                    guard FileManager.default.fileExists(atPath: tokens.appendingPathComponent("models/openai/whisper-base/tokenizer.json").path) else {
+                        throw VoiceError.message("В IPA отсутствует словарь распознавания.")
+                    }
+                    let options = ModelComputeOptions(melCompute: .cpuOnly,
+                                                      audioEncoderCompute: .cpuOnly,
+                                                      textDecoderCompute: .cpuOnly)
+                    recognizer = try await WhisperKit(WhisperKitConfig(
+                        modelFolder: root.appendingPathComponent("openai_whisper-base").path,
+                        tokenizerFolder: tokens, computeOptions: options,
+                        verbose: false, prewarm: false, load: true, download: false
+                    ))
+                    onEvent?("Локальная модель Whisper загружена. Интернет для речи не нужен.")
                 }
-            }
-        }
-    }
-
-    private func start() {
-        guard let recognizer, recognizer.supportsOnDeviceRecognition else {
-            status = "Локальное распознавание русского недоступно на этом iPhone."
-            return
-        }
-        guard recognizer.isAvailable else {
-            status = "Распознавание речи сейчас недоступно."
-            return
-        }
-        wantsListening = true
-        startCapture()
-    }
-
-    private func startCapture() {
-        guard wantsListening, let recognizer else { return }
-        generation += 1
-        let currentGeneration = generation
-        transcript = ""
-        do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetooth])
-            try session.setActive(true)
-            inputName = session.currentRoute.inputs.first?.portName ?? "Микрофон iPhone"
-            let newRequest = SFSpeechAudioBufferRecognitionRequest()
-            newRequest.requiresOnDeviceRecognition = true
-            newRequest.shouldReportPartialResults = true
-            request = newRequest
-            let input = audioEngine.inputNode
-            input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { buffer, _ in
-                newRequest.append(buffer)
-            }
-            hasTap = true
-            audioEngine.prepare()
-            try audioEngine.start()
-            isListening = true
-            status = "Слушаю и добавляю команды автоматически"
-            task = recognizer.recognitionTask(with: newRequest) { [weak self] result, error in
-                DispatchQueue.main.async {
-                    guard let self, self.wantsListening, self.generation == currentGeneration else { return }
-                    if let result {
-                        let phrase = result.bestTranscription.formattedString
-                        if phrase != self.transcript {
-                            self.transcript = phrase
-                            self.scheduleCommit()
-                        }
-                        if result.isFinal {
-                            self.commitAndRestart()
-                            return
-                        }
-                    }
-                    if let error {
-                        self.status = "Распознавание остановилось: \(error.localizedDescription)"
-                        self.stopCapture()
-                        self.wantsListening = false
+                let allowed = await withCheckedContinuation { continuation in
+                    AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning: $0) }
+                }
+                guard allowed else { throw VoiceError.message("Нет доступа к микрофону. Разреши его в Настройки → DiggerMap.") }
+                let session = AVAudioSession.sharedInstance()
+                try session.setCategory(.playAndRecord, mode: .measurement, options: [.allowBluetooth])
+                try session.setActive(true)
+                if let external = session.availableInputs?.first(where: { $0.portType == .headsetMic || $0.portType == .bluetoothHFP }) {
+                    try session.setPreferredInput(external)
+                }
+                inputName = session.currentRoute.inputs.first?.portName ?? "Микрофон iPhone"
+                let audio = VoiceCapture()
+                audio.onLevel = { [weak self] value in
+                    Task { @MainActor in self?.level = value }
+                }
+                audio.onPhrase = { [weak self] samples in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        self.onEvent?("Микрофон: фраза \(String(format: "%.1f", Double(samples.count) / 16000)) с → распознавание")
+                        self.pending.append(samples)
+                        self.processNext()
                     }
                 }
+                try audio.start()
+                capture = audio
+                isListening = true
+                status = "Слушаю · говори и делай паузу после команды"
+                onEvent?("Запись включена: \(inputName)")
+            } catch {
+                status = error.localizedDescription
+                onEvent?("Ошибка: \(status)")
+                capture?.stop()
+                capture = nil
+                isListening = false
             }
-            rotationWork?.cancel()
-            let rotation = DispatchWorkItem { [weak self] in self?.commitAndRestart() }
-            rotationWork = rotation
-            DispatchQueue.main.asyncAfter(deadline: .now() + 45, execute: rotation)
-        } catch {
-            stopCapture()
-            wantsListening = false
-            status = "Не удалось включить микрофон: \(error.localizedDescription)"
+            isStarting = false
         }
     }
 
-    private func scheduleCommit() {
-        commitWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.commitAndRestart() }
-        commitWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4, execute: work)
+    private func processNext() {
+        guard !isProcessing, !pending.isEmpty, let recognizer else { return }
+        isProcessing = true
+        let audio = pending.removeFirst()
+        let generation = decodeGeneration
+        Task {
+            do {
+                let options = DecodingOptions(language: "ru", temperatureFallbackCount: 0,
+                                              sampleLength: 96, usePrefillCache: false,
+                                              skipSpecialTokens: true, withoutTimestamps: true)
+                let results: [TranscriptionResult] = try await recognizer.transcribe(audioArray: audio, decodeOptions: options)
+                guard generation == decodeGeneration else { return }
+                let phrase = results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+                transcript = phrase
+                if phrase.isEmpty {
+                    onEvent?("Речь не разобрана. Поднеси микрофон ближе и повтори.")
+                } else {
+                    onEvent?("Услышал: «\(phrase)»")
+                    onCommand?(phrase)
+                }
+            } catch {
+                if generation == decodeGeneration { onEvent?("Ошибка распознавания: \(error.localizedDescription)") }
+            }
+            isProcessing = false
+            processNext()
+        }
     }
 
-    private func commitAndRestart() {
-        guard wantsListening else { return }
-        let phrase = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !phrase.isEmpty { onCommand?(phrase) }
-        stopCapture(deactivateSession: false)
-        startCapture()
+    func stop(discardPending: Bool = false) {
+        capture?.stop()
+        capture = nil
+        isListening = false
+        level = 0
+        status = "Запись остановлена"
+        if discardPending {
+            pending = []
+            decodeGeneration += 1
+            isProcessing = false
+        }
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        onEvent?(status)
+    }
+}
+
+private enum VoiceError: LocalizedError {
+    case message(String)
+    var errorDescription: String? { if case .message(let text) = self { return text }; return nil }
+}
+
+/// The capture engine stays running while individual phrases are decoded.
+private final class VoiceCapture {
+    var onLevel: ((Float) -> Void)?
+    var onPhrase: (([Float]) -> Void)?
+    private let engine = AVAudioEngine()
+    private let queue = DispatchQueue(label: "app.diggermap.voice-segments")
+    private var segmenter = UtteranceSegmenter()
+    private var hasTap = false
+    private var frameCounter = 0
+
+    func start() throws {
+        let input = engine.inputNode
+        let source = input.outputFormat(forBus: 0)
+        guard source.sampleRate > 0, source.channelCount > 0,
+              let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false),
+              let converter = AVAudioConverter(from: source, to: target) else {
+            throw VoiceError.message("Микрофон не передаёт звук. Переподключи гарнитуру.")
+        }
+        input.installTap(onBus: 0, bufferSize: 2048, format: source) { [weak self] buffer, _ in
+            guard let self else { return }
+            let capacity = AVAudioFrameCount(Double(buffer.frameLength) * 16000 / source.sampleRate + 32)
+            guard let converted = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return }
+            var supplied = false
+            var conversionError: NSError?
+            converter.convert(to: converted, error: &conversionError) { _, status in
+                if supplied { status.pointee = .noDataNow; return nil }
+                supplied = true
+                status.pointee = .haveData
+                return buffer
+            }
+            guard conversionError == nil, let channel = converted.floatChannelData?[0] else { return }
+            let samples = Array(UnsafeBufferPointer(start: channel, count: Int(converted.frameLength)))
+            self.queue.async {
+                let output = self.segmenter.consume(samples)
+                self.frameCounter += 1
+                if self.frameCounter % 3 == 0 { self.onLevel?(output.level) }
+                if let phrase = output.phrase { self.onPhrase?(phrase) }
+            }
+        }
+        hasTap = true
+        engine.prepare()
+        try engine.start()
     }
 
     func stop() {
-        wantsListening = false
-        stopCapture()
-        status = "Запись остановлена. Карта сохранена."
-    }
-
-    private func stopCapture(deactivateSession: Bool = true) {
-        generation += 1
-        commitWork?.cancel()
-        rotationWork?.cancel()
-        commitWork = nil
-        rotationWork = nil
-        if audioEngine.isRunning { audioEngine.stop() }
-        if hasTap {
-            audioEngine.inputNode.removeTap(onBus: 0)
-            hasTap = false
-        }
-        request?.endAudio()
-        task?.cancel()
-        task = nil
-        request = nil
-        isListening = false
-        if deactivateSession {
-            try? AVAudioSession.sharedInstance().setActive(false)
-        }
+        engine.stop()
+        if hasTap { engine.inputNode.removeTap(onBus: 0); hasTap = false }
+        queue.async { if let phrase = self.segmenter.finish() { self.onPhrase?(phrase) } }
     }
 }

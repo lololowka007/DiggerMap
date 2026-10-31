@@ -11,12 +11,19 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate project
-        run: xcodegen generate
+        run: |
+          python3 Scripts/fetch_voice_models.py
+          xcodegen generate
       - name: Check spoken route commands
         run: |
           mkdir -p build
-          swiftc Sources/RouteModel.swift Sources/CommandParser.swift Tests/main.swift -o build/parser-check
+          swiftc Sources/RouteModel.swift Sources/CommandParser.swift Sources/UtteranceSegmenter.swift Tests/main.swift -o build/parser-check
           ./build/parser-check
+      - name: Check real local Russian transcription
+        run: |
+          say -v Milena -o build/voice.aiff "Иду налево сто метров."
+          swift run -c release --package-path VoiceCheck VoiceCheck "$PWD/VoiceModels" "$PWD/build/voice.aiff" "$PWD/build/transcript.txt"
+          ./build/parser-check build/transcript.txt
       - name: Archive iPhone app
         run: |
           xcodebuild archive -project DiggerMap.xcodeproj -scheme DiggerMap \
@@ -33,3 +40,17 @@ jobs:
         with:
           name: DiggerMap-unsigned-ipa
           path: build/DiggerMap-unsigned.ipa
+      - name: Preview iPhone 16 Pro Max layout
+        run: |
+          xcodebuild build -project DiggerMap.xcodeproj -scheme DiggerMap -configuration Debug -sdk iphonesimulator -derivedDataPath build/Simulator CODE_SIGNING_ALLOWED=NO
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import sys,json; d=json.load(sys.stdin); print(next(x["udid"] for group in d["devices"].values() for x in group if x["name"]=="iPhone 16 Pro Max"))')
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" build/Simulator/Build/Products/Debug-iphonesimulator/DiggerMap.app
+          SIMCTL_CHILD_DIGGERMAP_DEMO=1 xcrun simctl launch "$DEVICE" app.diggermap.route
+          sleep 4
+          xcrun simctl io "$DEVICE" screenshot build/iPhone16ProMax.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iPhone16ProMax-preview
+          path: build/iPhone16ProMax.png
