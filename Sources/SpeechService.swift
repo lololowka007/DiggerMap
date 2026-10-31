@@ -193,24 +193,12 @@ private final class VoiceCapture {
     func start() throws {
         let input = engine.inputNode
         let source = input.outputFormat(forBus: 0)
-        guard source.sampleRate > 0, source.channelCount > 0,
-              let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false),
-              let converter = AVAudioConverter(from: source, to: target) else {
-            throw VoiceError.message("Микрофон не передаёт звук. Переподключи гарнитуру.")
-        }
+        let conversion = try AudioConversion(source: source)
         input.installTap(onBus: 0, bufferSize: 2048, format: source) { [weak self] buffer, _ in
             guard let self else { return }
-            let capacity = AVAudioFrameCount(Double(buffer.frameLength) * 16000 / source.sampleRate + 32)
-            guard let converted = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return }
-            var supplied = false
-            var conversionError: NSError?
-            converter.convert(to: converted, error: &conversionError) { _, status in
-                if supplied { status.pointee = .noDataNow; return nil }
-                supplied = true
-                status.pointee = .haveData
-                return buffer
-            }
-            guard conversionError == nil, let channel = converted.floatChannelData?[0] else {
+            let samples: [Float]
+            do { samples = try conversion.convert(buffer) }
+            catch {
                 self.queue.async {
                     if !self.reportedError {
                         self.reportedError = true
@@ -219,7 +207,6 @@ private final class VoiceCapture {
                 }
                 return
             }
-            let samples = Array(UnsafeBufferPointer(start: channel, count: Int(converted.frameLength)))
             self.queue.async {
                 let output = self.segmenter.consume(samples)
                 self.frameCounter += 1

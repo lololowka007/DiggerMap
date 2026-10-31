@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import CoreML
 import WhisperKit
 
@@ -10,15 +11,27 @@ struct VoiceCheck {
             modelFolder: root.appendingPathComponent("openai_whisper-base").path,
             tokenizerFolder: root.appendingPathComponent("Tokenizers"),
             computeOptions: ModelComputeOptions(melCompute: .cpuOnly, audioEncoderCompute: .cpuOnly, textDecoderCompute: .cpuOnly),
-            verbose: false, prewarm: false, load: true, download: false)
+            verbose: true, logLevel: .debug, prewarm: false, load: true, download: false)
         let kit = try await WhisperKit(config)
-        let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: CommandLine.arguments[2])
+        let file = try AVAudioFile(forReading: URL(fileURLWithPath: CommandLine.arguments[2]),
+                                   commonFormat: .pcmFormatFloat32, interleaved: false)
+        let conversion = try AudioConversion(source: file.processingFormat)
+        var segmenter = UtteranceSegmenter()
+        var phrases: [[Float]] = []
+        while file.framePosition < file.length {
+            let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 2048)!
+            try file.read(into: buffer)
+            if let phrase = segmenter.consume(try conversion.convert(buffer)).phrase { phrases.append(phrase) }
+        }
+        if let phrase = segmenter.finish() { phrases.append(phrase) }
+        precondition(phrases.count == 1, "Microphone processing must detect exactly one phrase")
+        let audio = phrases[0]
         let rms = sqrt(audio.reduce(Float(0)) { $0 + $1 * $1 } / Float(max(audio.count, 1)))
         print("AUDIO: \(audio.count) samples, RMS \(rms)")
         precondition(audio.count > 16000 && rms > 0.005, "Test fixture must contain audible speech")
         let results: [TranscriptionResult] = try await kit.transcribe(
             audioArray: audio,
-            decodeOptions: DecodingOptions(language: "ru", temperatureFallbackCount: 0,
+            decodeOptions: DecodingOptions(verbose: true, language: "ru", temperatureFallbackCount: 0,
                 sampleLength: 96, usePrefillCache: false, skipSpecialTokens: true, withoutTimestamps: true,
                 noSpeechThreshold: nil))
         let phrase = results.map(\.text).joined(separator: " ")
