@@ -4,9 +4,8 @@ options:
   deploymentTarget:
     iOS: "17.0"
 packages:
-  WhisperKit:
-    url: https://github.com/argmaxinc/WhisperKit.git
-    exactVersion: "0.9.4"
+  WhisperBinary:
+    path: Vendor/WhisperBinary
 targets:
   DiggerMap:
     type: application
@@ -17,7 +16,8 @@ targets:
         type: folder
         buildPhase: resources
     dependencies:
-      - package: WhisperKit
+      - package: WhisperBinary
+        product: WhisperBinary
     info:
       path: Sources/Info.plist
       properties:

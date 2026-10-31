@@ -3,3 +3,4 @@ VoiceModels/
 Sources/Info.plist
 *.xcodeproj/
 VoiceCheck/.build/
+Vendor/WhisperBinary/whisper.xcframework/

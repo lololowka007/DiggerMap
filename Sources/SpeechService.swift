@@ -1,7 +1,5 @@
 import AVFoundation
 import Combine
-import CoreML
-import WhisperKit
 
 @MainActor
 final class SpeechService: ObservableObject {
@@ -15,7 +13,7 @@ final class SpeechService: ObservableObject {
     var onCommand: ((String) -> Void)?
     var onEvent: ((String) -> Void)?
 
-    private var recognizer: WhisperKit?
+    private var recognizer: OfflineRecognizer?
     private var capture: VoiceCapture?
     private var pending: [[Float]] = []
     private var decodeGeneration = 0
@@ -63,18 +61,7 @@ final class SpeechService: ObservableObject {
                     guard let root = Bundle.main.url(forResource: "VoiceModels", withExtension: nil) else {
                         throw VoiceError.message("В IPA отсутствует папка голосовой модели.")
                     }
-                    let tokens = root.appendingPathComponent("Tokenizers")
-                    guard FileManager.default.fileExists(atPath: tokens.appendingPathComponent("models/openai/whisper-base/tokenizer.json").path) else {
-                        throw VoiceError.message("В IPA отсутствует словарь распознавания.")
-                    }
-                    let options = ModelComputeOptions(melCompute: .cpuOnly,
-                                                      audioEncoderCompute: .cpuOnly,
-                                                      textDecoderCompute: .cpuOnly)
-                    recognizer = try await WhisperKit(WhisperKitConfig(
-                        modelFolder: root.appendingPathComponent("openai_whisper-base").path,
-                        tokenizerFolder: tokens, computeOptions: options,
-                        verbose: false, prewarm: false, load: true, download: false
-                    ))
+                    recognizer = try await OfflineRecognizer.load(path: root.appendingPathComponent("ggml-base.bin").path)
                     onEvent?("Локальная модель Whisper загружена. Интернет для речи не нужен.")
                 }
                 let allowed = await withCheckedContinuation { continuation in
@@ -134,11 +121,9 @@ final class SpeechService: ObservableObject {
         let generation = decodeGeneration
         Task {
             do {
-                let options = DecodingOptions(language: "ru", usePrefillCache: false,
-                                              firstTokenLogProbThreshold: nil)
-                let results: [TranscriptionResult] = try await recognizer.transcribe(audioArray: audio, decodeOptions: options)
+                let recognized = try await recognizer.transcribe(audio)
                 if generation == decodeGeneration {
-                    let phrase = results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+                    let phrase = recognized
                     transcript = phrase
                     if phrase.isEmpty {
                         onEvent?("Речь не разобрана. Поднеси микрофон ближе и повтори.")

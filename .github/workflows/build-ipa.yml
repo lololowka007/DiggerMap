@@ -23,6 +23,7 @@ jobs:
         run: |
           ln -s "$PWD/Sources/AudioConversion.swift" VoiceCheck/Sources/AudioConversion.swift
           ln -s "$PWD/Sources/UtteranceSegmenter.swift" VoiceCheck/Sources/UtteranceSegmenter.swift
+          ln -s "$PWD/Sources/OfflineRecognizer.swift" VoiceCheck/Sources/OfflineRecognizer.swift
           swift run -c release --package-path VoiceCheck VoiceCheck "$PWD/VoiceModels" "$PWD/Tests/voice-command.wav" "$PWD/build/transcript.txt"
           ./build/parser-check build/transcript.txt
       - name: Archive iPhone app

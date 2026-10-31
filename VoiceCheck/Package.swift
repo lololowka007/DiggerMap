@@ -3,7 +3,7 @@ import PackageDescription
 let package = Package(
     name: "VoiceCheck",
     platforms: [.macOS(.v13)],
-    dependencies: [.package(url: "https://github.com/argmaxinc/WhisperKit.git", exact: "0.9.4")],
+    dependencies: [.package(path: "../Vendor/WhisperBinary")],
     targets: [.executableTarget(name: "VoiceCheck",
-        dependencies: [.product(name: "WhisperKit", package: "whisperkit")], path: "Sources")]
+        dependencies: [.product(name: "WhisperBinary", package: "WhisperBinary")], path: "Sources")]
 )
