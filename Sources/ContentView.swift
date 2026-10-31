@@ -45,7 +45,9 @@ struct ContentView: View {
             voiceBar
         }
         .confirmationDialog("Сбросить текущую карту?", isPresented: $showResetFirst) {
-            Button("Продолжить сброс", role: .destructive) { showResetFinal = true }
+            Button("Продолжить сброс", role: .destructive) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { showResetFinal = true }
+            }
             Button("Отмена", role: .cancel) {}
         } message: {
             Text("Все точки и маршрут этой карты будут удалены.")
@@ -61,24 +63,6 @@ struct ContentView: View {
             Button("Отмена", role: .cancel) {}
         } message: {
             Text("Это второе подтверждение. Действие нельзя отменить.")
-        }
-        .alert("Добавить точку", isPresented: $showMarker) {
-            TextField("Название точки", text: $markerName)
-            Button("Добавить") {
-                route.addMarker(markerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Точка" : markerName)
-                save()
-                markerName = ""
-            }
-            Button("Отмена", role: .cancel) {}
-        } message: {
-            Text("Точка появится у текущей позиции.")
-        }
-        .alert("Исправить команду", isPresented: $showCorrection) {
-            TextField("Например: прошёл 4 метра", text: $correction)
-            Button("Применить") { apply(correction); correction = "" }
-            Button("Отмена", role: .cancel) {}
-        } message: {
-            Text("Ручной ввод нужен только для исправления распознавания.")
         }
         .onAppear {
             load()
@@ -158,8 +142,26 @@ struct ContentView: View {
             Button { showMarker = true } label: {
                 Label("Метка", systemImage: "mappin.and.ellipse")
             }
+            .alert("Добавить точку", isPresented: $showMarker) {
+                TextField("Название точки", text: $markerName)
+                Button("Добавить") {
+                    route.addMarker(markerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Точка" : markerName)
+                    save()
+                    markerName = ""
+                }
+                Button("Отмена", role: .cancel) {}
+            } message: {
+                Text("Точка появится у текущей позиции.")
+            }
             Button { showCorrection = true } label: {
                 Label("Исправить", systemImage: "pencil")
+            }
+            .alert("Исправить команду", isPresented: $showCorrection) {
+                TextField("Например: прошёл 4 метра", text: $correction)
+                Button("Применить") { apply(correction); correction = "" }
+                Button("Отмена", role: .cancel) {}
+            } message: {
+                Text("Ручной ввод нужен только для исправления распознавания.")
             }
             Spacer(minLength: 4)
             Menu {
