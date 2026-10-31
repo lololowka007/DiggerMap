@@ -106,7 +106,7 @@ struct MarkerDetailView: View {
                                     ShareLink(item: PhotoStorage.url(name)) { Label("Поделиться", systemImage: "square.and.arrow.up") }
                                     Spacer()
                                     Button("Убрать", role: .destructive) { session.removePhoto(name, from: markerID) }
-                                }.font(.caption)
+                                }.font(.caption).buttonStyle(.borderless)
                             }
                         }
                     }

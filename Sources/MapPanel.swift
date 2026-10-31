@@ -162,7 +162,8 @@ struct MapPanel: View {
         }
         .task(id: signature) {
             let snapshot = route, selected = level
-            geometry = await Task.detached(priority: .userInitiated) { CorridorGeometry(route: snapshot, level: selected) }.value
+            let updated = await Task.detached(priority: .userInitiated) { CorridorGeometry(route: snapshot, level: selected) }.value
+            if !Task.isCancelled { geometry = updated }
         }
     }
     private func mapButton(_ symbol: String, action: @escaping () -> Void) -> some View {
