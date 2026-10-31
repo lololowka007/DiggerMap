@@ -21,8 +21,7 @@ jobs:
           ./build/parser-check
       - name: Check real local Russian transcription
         run: |
-          say -v Milena -o build/voice.aiff "Иду налево сто метров."
-          swift run -c release --package-path VoiceCheck VoiceCheck "$PWD/VoiceModels" "$PWD/build/voice.aiff" "$PWD/build/transcript.txt"
+          swift run -c release --package-path VoiceCheck VoiceCheck "$PWD/VoiceModels" "$PWD/Tests/voice-command.wav" "$PWD/build/transcript.txt"
           ./build/parser-check build/transcript.txt
       - name: Archive iPhone app
         run: |

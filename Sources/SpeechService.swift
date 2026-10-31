@@ -19,6 +19,7 @@ final class SpeechService: ObservableObject {
     private var capture: VoiceCapture?
     private var pending: [[Float]] = []
     private var decodeGeneration = 0
+    private var captureGeneration = 0
     private var observers: [NSObjectProtocol] = []
 
     init() {
@@ -37,7 +38,10 @@ final class SpeechService: ObservableObject {
         })
         observers.append(NotificationCenter.default.addObserver(
             forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
+            let reason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            guard reason == AVAudioSession.RouteChangeReason.newDeviceAvailable.rawValue ||
+                  reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue else { return }
             Task { @MainActor in
                 guard let self, self.isListening else { return }
                 self.stop()
@@ -85,19 +89,30 @@ final class SpeechService: ObservableObject {
                 }
                 inputName = session.currentRoute.inputs.first?.portName ?? "Микрофон iPhone"
                 let audio = VoiceCapture()
+                captureGeneration += 1
+                let captureID = captureGeneration
                 audio.onLevel = { [weak self] value in
                     Task { @MainActor in self?.level = value }
                 }
                 audio.onPhrase = { [weak self] samples in
                     Task { @MainActor in
                         guard let self else { return }
+                        guard captureID == self.captureGeneration else { return }
                         self.onEvent?("Микрофон: фраза \(String(format: "%.1f", Double(samples.count) / 16000)) с → распознавание")
                         self.pending.append(samples)
                         self.processNext()
                     }
                 }
-                try audio.start()
+                audio.onIssue = { [weak self] text in
+                    Task { @MainActor in
+                        guard let self, captureID == self.captureGeneration else { return }
+                        self.stop(discardPending: true)
+                        self.status = text
+                        self.onEvent?("Микрофон: \(text)")
+                    }
+                }
                 capture = audio
+                try audio.start()
                 isListening = true
                 status = "Слушаю · говори и делай паузу после команды"
                 onEvent?("Запись включена: \(inputName)")
@@ -121,16 +136,18 @@ final class SpeechService: ObservableObject {
             do {
                 let options = DecodingOptions(language: "ru", temperatureFallbackCount: 0,
                                               sampleLength: 96, usePrefillCache: false,
-                                              skipSpecialTokens: true, withoutTimestamps: true)
+                                              skipSpecialTokens: true, withoutTimestamps: true,
+                                              noSpeechThreshold: nil)
                 let results: [TranscriptionResult] = try await recognizer.transcribe(audioArray: audio, decodeOptions: options)
-                guard generation == decodeGeneration else { return }
-                let phrase = results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-                transcript = phrase
-                if phrase.isEmpty {
-                    onEvent?("Речь не разобрана. Поднеси микрофон ближе и повтори.")
-                } else {
-                    onEvent?("Услышал: «\(phrase)»")
-                    onCommand?(phrase)
+                if generation == decodeGeneration {
+                    let phrase = results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+                    transcript = phrase
+                    if phrase.isEmpty {
+                        onEvent?("Речь не разобрана. Поднеси микрофон ближе и повтори.")
+                    } else {
+                        onEvent?("Услышал: «\(phrase)»")
+                        onCommand?(phrase)
+                    }
                 }
             } catch {
                 if generation == decodeGeneration { onEvent?("Ошибка распознавания: \(error.localizedDescription)") }
@@ -141,15 +158,15 @@ final class SpeechService: ObservableObject {
     }
 
     func stop(discardPending: Bool = false) {
-        capture?.stop()
+        capture?.stop(flush: !discardPending)
         capture = nil
         isListening = false
         level = 0
         status = "Запись остановлена"
         if discardPending {
+            captureGeneration += 1
             pending = []
             decodeGeneration += 1
-            isProcessing = false
         }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         onEvent?(status)
@@ -165,11 +182,13 @@ private enum VoiceError: LocalizedError {
 private final class VoiceCapture {
     var onLevel: ((Float) -> Void)?
     var onPhrase: (([Float]) -> Void)?
+    var onIssue: ((String) -> Void)?
     private let engine = AVAudioEngine()
     private let queue = DispatchQueue(label: "app.diggermap.voice-segments")
     private var segmenter = UtteranceSegmenter()
     private var hasTap = false
     private var frameCounter = 0
+    private var reportedError = false
 
     func start() throws {
         let input = engine.inputNode
@@ -191,7 +210,15 @@ private final class VoiceCapture {
                 status.pointee = .haveData
                 return buffer
             }
-            guard conversionError == nil, let channel = converted.floatChannelData?[0] else { return }
+            guard conversionError == nil, let channel = converted.floatChannelData?[0] else {
+                self.queue.async {
+                    if !self.reportedError {
+                        self.reportedError = true
+                        self.onIssue?("Не удалось прочитать звук из выбранного микрофона. Переподключи гарнитуру.")
+                    }
+                }
+                return
+            }
             let samples = Array(UnsafeBufferPointer(start: channel, count: Int(converted.frameLength)))
             self.queue.async {
                 let output = self.segmenter.consume(samples)
@@ -205,9 +232,12 @@ private final class VoiceCapture {
         try engine.start()
     }
 
-    func stop() {
+    func stop(flush: Bool = true) {
         engine.stop()
         if hasTap { engine.inputNode.removeTap(onBus: 0); hasTap = false }
-        queue.async { if let phrase = self.segmenter.finish() { self.onPhrase?(phrase) } }
+        queue.async {
+            let phrase = self.segmenter.finish()
+            if flush, let phrase { self.onPhrase?(phrase) }
+        }
     }
 }

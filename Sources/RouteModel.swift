@@ -45,8 +45,11 @@ struct RouteState: Codable {
             case .move(let meters):
                 guard meters > 0 && meters <= 500 else { continue }
                 let radians = heading * .pi / 180
-                points.append(RoutePoint(x: last.x + sin(radians) * meters,
-                                         y: last.y + cos(radians) * meters, level: level))
+                let next = RoutePoint(x: last.x + sin(radians) * meters,
+                                      y: last.y + cos(radians) * meters, level: level)
+                if source == "Шагомер", lastCommand == source, points.count > 1, last.level == level, last.label == nil {
+                    points[points.count - 1] = next
+                } else { points.append(next) }
                 totalMeters += meters
             case .turn(let degrees):
                 heading = (heading + degrees + 360).truncatingRemainder(dividingBy: 360)
