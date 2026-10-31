@@ -72,7 +72,7 @@ struct MapPanel: View {
                                      at: CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 12))
                     }
                 }
-                for marker in groups {
+                for marker in route.markers where marker.level == level && !marker.passages.isEmpty {
                     let p = position(marker.x, marker.y)
                     if preferences.config.showPassages {
                         for passage in marker.passages {
@@ -95,13 +95,25 @@ struct MapPanel: View {
                             }
                         }
                     }
+                }
+                for marker in groups {
+                    let p = position(marker.x, marker.y)
                     context.fill(Path(ellipseIn: CGRect(x: p.x - 10, y: p.y - 10, width: 20, height: 20)),
                                  with: .color(preferences.color(\.background).opacity(0.95)))
                     context.draw(Text(Image(systemName: marker.photos.isEmpty ? marker.kind.symbol : "camera.fill"))
                         .font(.system(size: 14, weight: .bold)).foregroundColor(preferences.color(\.accent)), at: p)
                     if preferences.config.showLabels {
-                        context.draw(Text(marker.title).font(.system(size: preferences.config.labelSize, weight: .semibold))
-                            .foregroundColor(preferences.color(\.text)), at: CGPoint(x: p.x + 14, y: p.y - 19), anchor: .leading)
+                        let label = Text(marker.title).font(.system(size: preferences.config.labelSize, weight: .semibold))
+                            .foregroundColor(preferences.color(\.text)).lineLimit(2)
+                        let maximumWidth = min(CGFloat(160), size.width * 0.48)
+                        let measured = context.resolve(label).measure(in: CGSize(width: maximumWidth, height: .infinity))
+                        let width = min(maximumWidth, measured.width)
+                        let x = min(max(8, p.x + 14), size.width - width - 8)
+                        let y = min(max(8, p.y - measured.height - 30), size.height - measured.height - 8)
+                        let rect = CGRect(x: x, y: y, width: width, height: measured.height)
+                        context.fill(Path(roundedRect: rect.insetBy(dx: -3, dy: -2), cornerRadius: 4),
+                                     with: .color(preferences.color(\.background).opacity(0.85)))
+                        context.draw(label, in: rect)
                     }
                 }
                 if let last = route.points.last, last.level == level {
