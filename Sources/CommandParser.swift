@@ -10,7 +10,10 @@ enum CommandParser {
         "восемнадцать": 18, "девятнадцать": 19,
         "двадцать": 20, "тридцать": 30, "сорок": 40, "пятьдесят": 50,
         "шестьдесят": 60, "семьдесят": 70, "восемьдесят": 80,
-        "девяносто": 90, "сто": 100
+        "девяносто": 90, "сто": 100,
+        "одного": 1, "двух": 2, "трех": 3, "четырех": 4,
+        "пяти": 5, "шести": 6, "семи": 7, "восьми": 8, "девяти": 9,
+        "десяти": 10, "полтора": 1.5, "полторы": 1.5
     ]
 
     static func parse(_ raw: String, stepLength: Double = 0.75) -> [RouteCommand] {
@@ -25,7 +28,7 @@ enum CommandParser {
         if text.contains("дверь") { return [.note("Дверь")] }
         if text.contains("выход") { return [.note("Выход")] }
         if text.contains("лестница") { return [.note("Лестница")] }
-        if text.contains("ширин") || (text.contains("коридор") && text.contains("метр")) {
+        if text.contains("ширин") {
             if let width = number(before: "метр", in: text) { return [.width(width)] }
         }
         if text.contains("подъем") || text.contains("вверх") || text.contains("этаж выше") { return [.level(1)] }
