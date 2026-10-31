@@ -36,7 +36,7 @@ struct ContentView: View {
                         Text("Перетащи блок за заголовок. Кнопки S / M / L меняют размер.")
                             .font(font(12)).foregroundStyle(preferences.color(\.muted))
                     }
-                    ForEach(c.blocks) { block in
+                    ForEach(c.blocks.filter { editing || !c.hiddenBlocks.contains($0) }) { block in
                         blockContainer(block, availableHeight: geometry.size.height)
                     }
                 }.padding(.horizontal, 16).padding(.vertical, 10)
@@ -113,13 +113,17 @@ struct ContentView: View {
                     Spacer()
                     Button { preferences.shift(block, by: -1) } label: { Image(systemName: "arrow.up") }
                     Button { preferences.shift(block, by: 1) } label: { Image(systemName: "arrow.down") }
+                    Button {
+                        if c.hiddenBlocks.contains(block) { preferences.config.hiddenBlocks.remove(block) }
+                        else { preferences.config.hiddenBlocks.insert(block) }
+                    } label: { Image(systemName: c.hiddenBlocks.contains(block) ? "eye.slash" : "eye") }
                 }.padding(.horizontal, 10).padding(.top, 8)
             }
             switch block {
             case .stats: stats
             case .map:
                 MapPanel(route: session.route, level: selectedLevel, preferences: preferences) { page = .marker($0) }
-                    .frame(height: c.mapAutoFit && !editing ? min(c.mapHeight, max(220, availableHeight - 340)) : c.mapHeight)
+                    .frame(height: c.mapAutoFit && !editing ? min(c.mapHeight, max(220, Double(availableHeight) - 340)) : c.mapHeight)
             case .voice: voicePanel
             }
             if editing {
@@ -220,6 +224,7 @@ struct ContentView: View {
                 .frame(maxWidth: c.compactRecord ? nil : .infinity).frame(minHeight: max(c.buttonHeight, 45 * c.fontScale))
                 .background(preferences.color(\.accent), in: RoundedRectangle(cornerRadius: c.cornerRadius))
         }.disabled(speech.isStarting)
+            .frame(maxWidth: .infinity, alignment: c.recordAlignment == "Слева" ? .leading : c.recordAlignment == "Справа" ? .trailing : .center)
     }
     private var journalView: some View {
         NavigationStack {
@@ -282,6 +287,6 @@ struct ContentView: View {
         }
     }
     private func font(_ size: Double, _ weight: Font.Weight = .regular) -> Font {
-        .system(size: size * c.fontScale, weight: weight, design: .rounded)
+        .system(size: size * c.fontScale, weight: c.boldText && weight == .regular ? .bold : weight, design: preferences.fontDesign)
     }
 }

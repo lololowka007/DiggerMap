@@ -86,7 +86,7 @@ enum CommandParser {
         else if text.contains("лестниц") { kind = .stairs }
         else if text.contains("развор") || text.contains("развер") { kind = .uTurn }
         else if !passages.isEmpty { kind = .junction }
-        let title = kind == .note ? String(text.prefix(45)).capitalized : kind.title
+        let title = [.note, .sign, .arrow, .photo].contains(kind) ? String(text.prefix(55)).capitalized : kind.title
         return MarkerDraft(kind: kind, title: title, detail: original, passages: passages)
     }
 

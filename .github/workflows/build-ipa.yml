@@ -26,6 +26,10 @@ jobs:
           ln -s "$PWD/Sources/OfflineRecognizer.swift" VoiceCheck/Sources/OfflineRecognizer.swift
           swift run -c release --package-path VoiceCheck VoiceCheck "$PWD/VoiceModels" "$PWD/Tests/voice-command.wav" "$PWD/build/transcript.txt"
           ./build/parser-check build/transcript.txt
+          for MODE in turn back; do
+            VoiceCheck/.build/release/VoiceCheck "$PWD/VoiceModels" "$PWD/Tests/$MODE-command.wav" "$PWD/build/transcript-$MODE.txt"
+            ./build/parser-check "build/transcript-$MODE.txt" "$MODE"
+          done
       - name: Archive iPhone app
         run: |
           xcodebuild archive -project DiggerMap.xcodeproj -scheme DiggerMap \

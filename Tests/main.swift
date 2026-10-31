@@ -44,6 +44,17 @@ precondition(observation.markers.last?.passages.count == 3)
 precondition(observation.markers.last?.passages.first?.elevation == 1)
 precondition(observation.markers.last?.passages.last?.elevation == -1)
 precondition(observation.markers.last?.detail == observationText)
+var branch = RouteState()
+_ = branch.apply(CommandParser.parse("слева проход выше, справа тупик"), source: "test")
+precondition(branch.heading == 0 && branch.level == 0)
+precondition(branch.markers.last?.kind == .junction)
+precondition(branch.markers.last?.passages.last?.label.contains("тупик") == true)
+var combined = RouteState()
+_ = combined.apply(CommandParser.parse("налево на двенадцать градусов прошел четыре метра"), source: "test")
+precondition(abs(combined.totalMeters - 4) < 0.001 && abs(combined.heading - 348) < 0.001)
+var upstairs = RouteState()
+_ = upstairs.apply(CommandParser.parse("я поднялся на один этаж"), source: "test")
+precondition(upstairs.level == 1)
 for (phrase, kind) in [("здесь тупик", MarkerKind.deadEnd), ("стрелка налево", .arrow),
                         ("надпись выход 12", .sign), ("фото ржавая дверь", .photo)] {
     var marker = RouteState()
@@ -89,8 +100,16 @@ precondition(phrases == 1, "One spoken phrase must produce exactly one command")
 if CommandLine.arguments.count > 1 {
     let heard = try String(contentsOfFile: CommandLine.arguments[1], encoding: .utf8)
     var actual = RouteState()
+    let mode = CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : "move"
+    if mode == "back" { _ = actual.apply([.move(5)], source: "test") }
     precondition(actual.apply(CommandParser.parse(heard), source: heard), "Real audio was not understood")
-    precondition(abs(actual.totalMeters - 100) < 0.001, "Real audio distance must be 100m")
-    precondition(abs((actual.points.last?.x ?? 0) + 100) < 0.001, "Real audio must go left")
+    if mode == "turn" {
+        precondition(abs(actual.heading - 180) < 0.001 && actual.markers.last?.kind == .uTurn, "Real audio must make a U-turn")
+    } else if mode == "back" {
+        precondition(abs((actual.points.last?.y ?? 0) - 3.5) < 0.001 && actual.heading == 0, "Real audio must step back two steps")
+    } else {
+        precondition(abs(actual.totalMeters - 100) < 0.001, "Real audio distance must be 100m")
+        precondition(abs((actual.points.last?.x ?? 0) + 100) < 0.001, "Real audio must go left")
+    }
     print("AUDIO → TEXT → MAP: OK")
 }

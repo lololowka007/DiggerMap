@@ -127,7 +127,7 @@ struct MapPanel: View {
                 zoom = min(max((zoomOrigin ?? 1) * value, 0.5), 8)
             }.onEnded { _ in zoomOrigin = nil })
             .simultaneousGesture(SpatialTapGesture().onEnded { tap in
-                let nearest = route.markers.filter { $0.level == level }.min {
+                let nearest = groups.min {
                     hypot(position($0.x, $0.y).x - tap.location.x, position($0.x, $0.y).y - tap.location.y) <
                     hypot(position($1.x, $1.y).x - tap.location.x, position($1.x, $1.y).y - tap.location.y)
                 }

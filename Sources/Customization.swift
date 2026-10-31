@@ -24,6 +24,8 @@ struct UIConfiguration: Codable {
     var route = "#DAE7E7"
     var grid = "#95B3B8"
     var fontScale = 1.0
+    var fontStyle = "Скруглённый"
+    var boldText = false
     var labelSize = 12.0
     var wallThickness = 3.0
     var gridOpacity = 0.12
@@ -42,11 +44,13 @@ struct UIConfiguration: Codable {
     var controlsAtTop = false
     var recordFirst = false
     var compactRecord = false
+    var recordAlignment = "По центру"
     var vibration = true
     var stepLength = 0.75
     var smallTurn = 12.0
     var corridorWidth = 2.0
     var blocks: [DashboardBlock] = [.stats, .map, .voice]
+    var hiddenBlocks: Set<DashboardBlock> = []
     var controls: [ControlAction] = [.journal, .markers, .settings]
 }
 
@@ -61,6 +65,14 @@ final class CustomizationStore: ObservableObject {
         else { config = UIConfiguration() }
     }
     func color(_ key: KeyPath<UIConfiguration, String>) -> Color { Color(hex: config[keyPath: key]) }
+    var fontDesign: Font.Design {
+        switch config.fontStyle {
+        case "Системный": return .default
+        case "С засечками": return .serif
+        case "Моноширинный": return .monospaced
+        default: return .rounded
+        }
+    }
     func move(_ block: DashboardBlock, to destination: DashboardBlock) {
         guard let from = config.blocks.firstIndex(of: block), let to = config.blocks.firstIndex(of: destination), from != to else { return }
         config.blocks.remove(at: from)
@@ -127,6 +139,10 @@ struct CustomizationView: View {
                     colorPicker("Сетка", \.grid)
                 }
                 Section("Текст и размеры") {
+                    Picker("Шрифт", selection: $preferences.config.fontStyle) {
+                        ForEach(["Скруглённый", "Системный", "С засечками", "Моноширинный"], id: \.self) { Text($0) }
+                    }
+                    Toggle("Жирный текст", isOn: $preferences.config.boldText)
                     Toggle("Автоподгонка карты под экран", isOn: $preferences.config.mapAutoFit)
                     slider("Масштаб текста", $preferences.config.fontScale, 0.8...1.5)
                     slider("Подписи карты", $preferences.config.labelSize, 9...24)
@@ -151,6 +167,15 @@ struct CustomizationView: View {
                     Toggle("Панель кнопок сверху", isOn: $preferences.config.controlsAtTop)
                     Toggle("Запись перед остальными кнопками", isOn: $preferences.config.recordFirst)
                     Toggle("Компактная кнопка записи", isOn: $preferences.config.compactRecord)
+                    Picker("Выравнивание кнопки записи", selection: $preferences.config.recordAlignment) {
+                        ForEach(["Слева", "По центру", "Справа"], id: \.self) { Text($0) }
+                    }
+                    ForEach(DashboardBlock.allCases) { block in
+                        Toggle("Показывать: " + block.title, isOn: Binding(
+                            get: { !preferences.config.hiddenBlocks.contains(block) },
+                            set: { if $0 { preferences.config.hiddenBlocks.remove(block) } else { preferences.config.hiddenBlocks.insert(block) } }
+                        ))
+                    }
                     Text("Удерживай любой блок на главном экране: появятся перетаскивание, порядок и размеры.")
                         .font(.footnote).foregroundStyle(.secondary)
                     ForEach(preferences.config.controls) { control in
