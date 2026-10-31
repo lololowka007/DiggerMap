@@ -84,7 +84,10 @@ final class SpeechService: ObservableObject {
                             self.transcript = phrase
                             self.scheduleCommit()
                         }
-                        if result.isFinal { self.commitAndRestart() }
+                        if result.isFinal {
+                            self.commitAndRestart()
+                            return
+                        }
                     }
                     if let error {
                         self.status = "Распознавание остановилось: \(error.localizedDescription)"
@@ -115,11 +118,8 @@ final class SpeechService: ObservableObject {
         guard wantsListening else { return }
         let phrase = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         if !phrase.isEmpty { onCommand?(phrase) }
-        stopCapture()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            guard self?.wantsListening == true else { return }
-            self?.startCapture()
-        }
+        stopCapture(deactivateSession: false)
+        startCapture()
     }
 
     func stop() {
@@ -128,7 +128,7 @@ final class SpeechService: ObservableObject {
         status = "Запись остановлена. Карта сохранена."
     }
 
-    private func stopCapture() {
+    private func stopCapture(deactivateSession: Bool = true) {
         generation += 1
         commitWork?.cancel()
         rotationWork?.cancel()
@@ -144,6 +144,8 @@ final class SpeechService: ObservableObject {
         task = nil
         request = nil
         isListening = false
-        try? AVAudioSession.sharedInstance().setActive(false)
+        if deactivateSession {
+            try? AVAudioSession.sharedInstance().setActive(false)
+        }
     }
 }
