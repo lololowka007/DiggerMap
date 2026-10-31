@@ -104,7 +104,7 @@ struct MapPanel: View {
                         .font(.system(size: 14, weight: .bold)).foregroundColor(preferences.color(\.accent)), at: p)
                     if preferences.config.showLabels {
                         let label = Text(marker.title).font(.system(size: preferences.config.labelSize, weight: .semibold))
-                            .foregroundColor(preferences.color(\.text)).lineLimit(2)
+                            .foregroundColor(preferences.color(\.text))
                         let maximumWidth = min(CGFloat(160), size.width * 0.48)
                         let measured = context.resolve(label).measure(in: CGSize(width: maximumWidth, height: .infinity))
                         let width = min(maximumWidth, measured.width)
