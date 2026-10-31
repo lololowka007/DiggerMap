@@ -137,7 +137,7 @@ final class SpeechService: ObservableObject {
                 let options = DecodingOptions(language: "ru", temperatureFallbackCount: 0,
                                               sampleLength: 96, usePrefillCache: false,
                                               skipSpecialTokens: true, withoutTimestamps: true,
-                                              noSpeechThreshold: nil)
+                                              firstTokenLogProbThreshold: nil, noSpeechThreshold: nil)
                 let results: [TranscriptionResult] = try await recognizer.transcribe(audioArray: audio, decodeOptions: options)
                 if generation == decodeGeneration {
                     let phrase = results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)

@@ -33,7 +33,10 @@ struct VoiceCheck {
             audioArray: audio,
             decodeOptions: DecodingOptions(verbose: true, language: "ru", temperatureFallbackCount: 0,
                 sampleLength: 96, usePrefillCache: false, skipSpecialTokens: true, withoutTimestamps: true,
-                noSpeechThreshold: nil))
+                firstTokenLogProbThreshold: nil, noSpeechThreshold: nil))
+        for result in results {
+            print("DECODE: loops=\(result.timings.totalDecodingLoops), segments=\(result.segments.count), seconds=\(result.timings.inputAudioSeconds)")
+        }
         let phrase = results.map(\.text).joined(separator: " ")
         print("AUDIO → TEXT: \(phrase)")
         try phrase.write(toFile: CommandLine.arguments[3], atomically: true, encoding: .utf8)

@@ -5,6 +5,7 @@ final class MotionService: ObservableObject {
     @Published var relativeAltitude: Double?
     var onDistance: ((Double) -> Void)?
     var onEvent: ((String) -> Void)?
+    var onFailure: ((String) -> Void)?
     var stepLength = 0.75
     private let altimeter = CMAltimeter()
     private let pedometer = CMPedometer()
@@ -32,7 +33,7 @@ final class MotionService: ObservableObject {
             DispatchQueue.main.async {
                 guard let self, self.walking else { return }
                 if let error {
-                    self.onEvent?("Шагомер: \(error.localizedDescription). Разреши «Движение и фитнес» в настройках.")
+                    self.onFailure?("Шагомер: \(error.localizedDescription). Разреши «Движение и фитнес» в настройках.")
                     return
                 }
                 guard let data else { return }

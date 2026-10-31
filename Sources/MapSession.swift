@@ -50,6 +50,11 @@ final class MapSession: ObservableObject {
         speech.onEvent = { [weak self] text in self?.log(text) }
         speech.onCommand = { [weak self] text in self?.apply(text) }
         motion.onEvent = { [weak self] text in self?.log(text) }
+        motion.onFailure = { [weak self] text in
+            self?.setWalking(false)
+            self?.lastAction = text
+            self?.log(text)
+        }
         motion.onDistance = { [weak self] meters in
             guard let self, self.walking else { return }
             if self.route.apply([.move(meters)], source: "Шагомер") {
