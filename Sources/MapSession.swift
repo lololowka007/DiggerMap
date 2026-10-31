@@ -89,13 +89,18 @@ final class MapSession: ObservableObject {
             log("Не понял: «\(phrase)». Нужны направление и расстояние либо «иду прямо».")
             return
         }
-        let explicitDistance = commands.contains {
-            switch $0 { case .move, .backtrack: return true; default: return false }
-        }
+        let hasMove = commands.contains { if case .move = $0 { return true }; return false }
+        let hasTurn = commands.contains { if case .turn = $0 { return true }; return false }
+        let hasBackstep = commands.contains { if case .backtrack = $0 { return true }; return false }
+        let explicitDistance = hasMove && !hasTurn
         if explicitDistance, walking {
             if let baseline = walkingBaseline { route = baseline }
             setWalking(false)
             log("Участок по шагам заменён расстоянием из голосовой команды.")
+        } else if walking && (hasMove || hasBackstep) {
+            // A new turned leg or a backstep starts from the actual current position.
+            // Preserve the distance already recorded by the pedometer.
+            setWalking(false)
         }
         var actions: [String] = []
         for command in commands {
