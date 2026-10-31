@@ -327,6 +327,13 @@ private struct MapPanel: View {
                     center.addLine(to: b)
                     context.stroke(center, with: .color(.white.opacity(0.55)),
                                    style: StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                    let meters = hypot(point.x - previous.x, point.y - previous.y)
+                    context.draw(
+                        Text(String(format: "%.1f м", meters))
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundColor(.white),
+                        at: CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 11)
+                    )
                 }
                 for point in visible {
                     guard let label = point.label else { continue }
