@@ -46,6 +46,10 @@ struct UIConfiguration: Codable {
     var compactRecord = false
     var recordAlignment = "По центру"
     var vibration = true
+    var vibrationAccepted = true
+    var vibrationRejected = true
+    var vibrationPause = true
+    var pauseSeconds = 8.0
     var stepLength = 0.75
     var smallTurn = 12.0
     var corridorWidth = 2.0
@@ -191,6 +195,10 @@ struct CustomizationView: View {
                     slider("Длина шага для голосовых чисел, м", $preferences.config.stepLength, 0.3...1.2)
                     slider("«Чуть левее / правее», °", $preferences.config.smallTurn, 5...45)
                     Toggle("Вибрация после понятой команды", isOn: $preferences.config.vibration)
+                    Toggle("Вибрация после принятой записи", isOn: $preferences.config.vibrationAccepted)
+                    Toggle("Две вибрации при ошибке", isOn: $preferences.config.vibrationRejected)
+                    Toggle("Длинная вибрация при остановке", isOn: $preferences.config.vibrationPause)
+                    Stepper("Пауза считается через (Int(preferences.config.pauseSeconds)) сек", value: $preferences.config.pauseSeconds, in: 4...30, step: 1)
                 }
                 Section {
                     Button("Вернуть исходные настройки", role: .destructive) { preferences.config = UIConfiguration() }

@@ -25,6 +25,8 @@ struct ContentView: View {
     @State private var showResetFirst = false
     @State private var showResetFinal = false
     @State private var commandText = ""
+    @State private var showUndo = false
+    @State private var pauseNote = ""
     private var c: UIConfiguration { preferences.config }
 
     var body: some View {
@@ -80,6 +82,15 @@ struct ContentView: View {
             Button("Да, удалить", role: .destructive) { speech.stop(discardPending: true); session.reset() }
             Button("Отмена", role: .cancel) {}
         }
+        .alert("Отменить последнюю команду?", isPresented: $showUndo) {
+            Button("Отменить", role: .destructive) { session.undoLast() }
+            Button("Оставить", role: .cancel) {}
+        } message: { Text("Маршрут и метки вернутся к состоянию до последней голосовой команды.") }
+        .alert("Пауза обнаружена", isPresented: $session.pauseSuggestion) {
+            TextField("Что заметил?", text: $pauseNote)
+            Button("Сохранить заметку") { session.acceptPauseNote(pauseNote); pauseNote = "" }
+            Button("Пропустить", role: .cancel) { session.dismissPause(); pauseNote = "" }
+        } message: { Text("Акселерометр заметил неподвижность. Добавить заметку к текущей точке?") }
     }
 
     private var header: some View {
@@ -96,6 +107,11 @@ struct ContentView: View {
                     Button("Настроить оформление", systemImage: "slider.horizontal.3") { page = .customize }
                     Button("Редактировать блоки", systemImage: "rectangle.3.group") { editing = true }
                     Button("Ввести команду", systemImage: "keyboard") { page = .command }
+                    Button("Вернуться к входу", systemImage: "arrow.uturn.backward") { session.returnToEntrance() }
+                    Button("Отменить последнюю команду", systemImage: "arrow.uturn.backward.circle") { showUndo = true }
+                    Button("Опасность с камеры", systemImage: "camera.viewfinder") {
+                        if let id = session.addMarker("Опасность", kind: .danger) { page = .marker(id) }
+                    }
                     Button("Выбрать план уровня", systemImage: "square.3.layers.3d") { page = .levels }
                     Button("Сбросить карту", systemImage: "trash", role: .destructive) { showResetFirst = true }
                 } label: { Image(systemName: "ellipsis.circle").font(.title2) }

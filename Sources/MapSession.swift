@@ -14,10 +14,12 @@ final class MapSession: ObservableObject {
     @Published var journal: [JournalEntry] = []
     @Published var lastAction = "Скажи «налево сто метров» или «иду прямо»."
     @Published var walking = false
+    @Published var pauseSuggestion = false
     private weak var motion: MotionService?
     private var walkingBaseline: RouteState?
     private var connected = false
     private weak var preferences: CustomizationStore?
+    private var undoRoute: RouteState?
 
     init() {
         let defaults = UserDefaults.standard
@@ -70,6 +72,13 @@ final class MapSession: ObservableObject {
             self?.lastAction = text
             self?.log(text)
         }
+        motion.onPause = { [weak self] in
+            guard let self else { return }
+            self.pauseSuggestion = true
+            self.lastAction = "Похоже, ты остановился. Добавить заметку?"
+            self.log(self.lastAction)
+            if self.preferences?.config.vibrationPause == true { self.vibrate(.heavy) }
+        }
         motion.onDistance = { [weak self] meters in
             guard let self, self.walking else { return }
             if self.route.apply([.move(meters)], source: "Шагомер") {
@@ -87,8 +96,10 @@ final class MapSession: ObservableObject {
         guard !commands.isEmpty else {
             lastAction = "Не понял. Пример: «налево сто метров»."
             log("Не понял: «\(phrase)». Нужны направление и расстояние либо «иду прямо».")
+            if preferences?.config.vibrationRejected == true { vibrate(.heavy) }
             return
         }
+        undoRoute = route
         let hasMove = commands.contains { if case .move = $0 { return true }; return false }
         let hasTurn = commands.contains { if case .turn = $0 { return true }; return false }
         let hasBackstep = commands.contains { if case .backtrack = $0 { return true }; return false }
@@ -125,7 +136,7 @@ final class MapSession: ObservableObject {
         if walking { walkingBaseline = route }
         lastAction = actions.isEmpty ? "Значение вне допустимого диапазона." : actions.joined(separator: " · ")
         log("Карта: \(lastAction)")
-        if !actions.isEmpty, preferences?.config.vibration == true { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+        if !actions.isEmpty, preferences?.config.vibration == true { vibrate(.light) }
         save()
     }
 
@@ -141,6 +152,30 @@ final class MapSession: ObservableObject {
         }
     }
 
+    func acceptPauseNote(_ text: String) {
+        pauseSuggestion = false
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        _ = addMarker(text)
+    }
+    func dismissPause() { pauseSuggestion = false }
+    func undoLast() {
+        guard let previous = undoRoute else { return }
+        let current = route; route = previous; undoRoute = current
+        lastAction = "Последняя команда отменена"; log(lastAction); save(); vibrate(.medium)
+    }
+    func returnToEntrance() {
+        guard let first = route.points.first else { return }
+        guard let current = route.points.last else { return }
+        let dx = first.x - current.x, dy = first.y - current.y
+        let distance = hypot(dx, dy)
+        guard distance > 0.05 else { lastAction = "Ты уже у входа"; log(lastAction); return }
+        undoRoute = route
+        route.heading = atan2(dx, dy) * 180 / .pi
+        _ = route.apply([.move(distance)], source: "Возврат к входу")
+        lastAction = String(format: "Маршрут к входу: %.1f м", distance); log(lastAction); save()
+    }
+    private func vibrate(_ style: UIImpactFeedbackGenerator.FeedbackStyle) { UIImpactFeedbackGenerator(style: style).impactOccurred() }
+
     @discardableResult
     func addMarker(_ name: String) -> UUID? {
         route.addMarker(name.isEmpty ? "Точка" : name)
@@ -149,6 +184,12 @@ final class MapSession: ObservableObject {
         if walking { walkingBaseline = route }
         save()
         return route.markers.last?.id
+    }
+    @discardableResult
+    func addMarker(_ name: String, kind: MarkerKind) -> UUID? {
+        route.addAnnotation(MarkerDraft(kind: kind, title: name.isEmpty ? kind.title : name))
+        lastAction = "Метка: \(name.isEmpty ? kind.title : name)"
+        log(lastAction); save(); return route.markers.last?.id
     }
 
     func updateMarker(_ id: UUID, title: String, detail: String, kind: MarkerKind) {
